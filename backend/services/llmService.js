@@ -4,15 +4,16 @@
  * llmService.js
  *
  * Generates a structured enforcement report from CV detection results using
- * OpenAI (via LangChain.js).  Falls back to a deterministic rule-based
- * report when OPENAI_API_KEY is not set, so the system works fully offline.
+ * Google Gemini (via LangChain.js @langchain/google-genai).
+ * Falls back to a deterministic rule-based report when GEMINI_API_KEY is not
+ * set, so the system works fully offline.
  */
 
-const { ChatOpenAI }          = require('@langchain/openai');
-const { ChatPromptTemplate }  = require('@langchain/core/prompts');
-const { StringOutputParser }  = require('@langchain/core/output_parsers');
+const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
+const { ChatPromptTemplate }     = require('@langchain/core/prompts');
+const { StringOutputParser }     = require('@langchain/core/output_parsers');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 // ── Offline / rule-based fallback ─────────────────────────────────────────────
 
@@ -95,10 +96,10 @@ function buildDetectionContext(detections, imageInfo) {
 
 /**
  * Parse the LLM text response to a structured object.
- * Tries JSON.parse first; falls back to regex extraction.
+ * Tries JSON.parse first; falls back to rule-based on failure.
  */
 function parseLLMResponse(text, detections, imageInfo) {
-  // Strip markdown code fences if present
+  // Strip markdown code fences if present (Gemini sometimes wraps output)
   const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
 
   try {
@@ -116,7 +117,7 @@ function parseLLMResponse(text, detections, imageInfo) {
     };
   } catch {
     // Could not parse — fall back to rule-based
-    console.warn('[llmService] Failed to parse LLM JSON response; using rule-based fallback.');
+    console.warn('[llmService] Failed to parse Gemini JSON response; using rule-based fallback.');
     const fallback = ruleBasedReport(detections, imageInfo);
     fallback.rawText = text; // preserve original text
     return fallback;
@@ -132,18 +133,18 @@ function parseLLMResponse(text, detections, imageInfo) {
  */
 async function generateReport(detections, imageInfo) {
   // ── Offline mode ───────────────────────────────────────────────────────────
-  if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your_key_here') {
-    console.info('[llmService] OPENAI_API_KEY not set — using rule-based offline report.');
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_key_here') {
+    console.info('[llmService] GEMINI_API_KEY not set — using rule-based offline report.');
     return ruleBasedReport(detections, imageInfo);
   }
 
-  // ── LangChain + OpenAI ────────────────────────────────────────────────────
+  // ── LangChain + Gemini ────────────────────────────────────────────────────
   try {
-    const model = new ChatOpenAI({
-      model:       'gpt-4o-mini',
+    const model = new ChatGoogleGenerativeAI({
+      model:       'gemini-1.5-flash',
       temperature: 0.2,
-      maxTokens:   512,
-      openAIApiKey: OPENAI_API_KEY,
+      maxOutputTokens: 512,
+      apiKey:      GEMINI_API_KEY,
     });
 
     const prompt = ChatPromptTemplate.fromMessages([
@@ -158,7 +159,7 @@ async function generateReport(detections, imageInfo) {
 
     return parseLLMResponse(llmOutput, detections, imageInfo);
   } catch (err) {
-    console.error('[llmService] OpenAI call failed:', err.message);
+    console.error('[llmService] Gemini call failed:', err.message);
     // Gracefully fall back so the pipeline never breaks
     const fallback = ruleBasedReport(detections, imageInfo);
     fallback.rawText = `LLM error: ${err.message}\n\n[Fallback report applied]`;
