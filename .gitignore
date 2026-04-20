@@ -1,0 +1,56 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# .gitignore — ad-detection-system
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Node dependencies (all levels)
+node_modules/
+**/node_modules/
+
+# Uploaded images (user data, not source code)
+backend/uploads/
+
+# Environment secrets — NEVER commit real keys
+backend/.env
+.env
+**/.env
+
+# ── ML ──────────────────────────────────────────────────────────────────────
+# Model weights (large binaries — download or train separately)
+ml/models/
+ml/runs/
+# Training data (provide your own labeled dataset)
+ml/data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyd
+
+# Python virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# ── Build output ─────────────────────────────────────────────────────────────
+frontend/build/
+dist/
+
+# ── OS / editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Test coverage ────────────────────────────────────────────────────────────
+coverage/

@@ -1,0 +1,13 @@
+# YOLOv8 dataset configuration for street advertisement detection
+# Classes:
+#   poster       - paper/printed poster on walls or poles
+#   banner       - large fabric/vinyl banner
+#   sticker      - adhesive sticker ad
+#   graffiti_ad  - graffiti-style promotional content
+
+path: ./data
+train: images/train
+val: images/val
+
+nc: 4
+names: ['poster', 'banner', 'sticker', 'graffiti_ad']

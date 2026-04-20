@@ -1,0 +1,10 @@
+# Normalize line endings to LF on checkin for consistency across OS
+* text=auto eol=lf
+
+# Force binary files to not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pt binary
+*.ico binary
