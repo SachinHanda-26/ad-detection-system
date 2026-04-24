@@ -1,0 +1,523 @@
+
+================================================================================
+  CV-BASED DETECTION OF UNAUTHORIZED STREET ADVERTISEMENTS
+  Project Explanation — B.Tech CSE Final Year Viva / Technical Interview
+================================================================================
+
+--------------------------------------------------------------------------------
+1. PROJECT DEFINITION
+--------------------------------------------------------------------------------
+
+What is the project about?
+---------------------------
+"AdDetect" is a full-stack, production-ready computer vision (CV) system that
+automatically detects unauthorized street advertisements — such as illegally
+pasted posters, vinyl banners, adhesive stickers, and graffiti-style commercial
+content — in photographs taken from public spaces.
+
+The system accepts an image as input (uploaded via a web interface), runs it
+through a deep-learning object detection model (YOLOv8), generates a structured
+enforcement report using a Large Language Model (LLM), and stores every result
+in a database for audit and trend analysis.
+
+Core Idea and Objective:
+--------------------------
+  • DETECT  — Locate advertisements in an image using YOLOv8 bounding-box detection.
+  • CLASSIFY — Categorize them into four classes: poster, banner, sticker, graffiti_ad.
+  • REPORT  — Use an LLM (Google Gemini) to produce a human-readable enforcement
+              report with a legal status verdict and recommended action.
+  • STORE   — Persist every detection record in MongoDB for historical queries.
+  • DISPLAY — Show results on a React dashboard in real time.
+
+In simple terms: think of it as an automated "ad violation camera" that not only
+spots illegal hoardings but also tells the municipal officer exactly what to do
+about them.
+
+
+--------------------------------------------------------------------------------
+2. PROBLEM STATEMENT & NEED
+--------------------------------------------------------------------------------
+
+Real-World Problem:
+-------------------
+Urban areas worldwide suffer from unauthorized street advertising — posters
+pasted on walls, banners strung across roads without permission, stickers on
+public property, and spray-painted commercial messages. These:
+
+  (a) Violate municipal laws and zoning regulations.
+  (b) Create visual pollution, degrading the urban environment.
+  (c) Incur costs on city authorities for removal and litigation.
+  (d) Generate safety hazards (obstructed traffic signs, loose banners, etc.).
+
+Why is this problem important?
+-------------------------------
+  • Cities like Delhi, Mumbai, and many European capitals have dedicated anti-
+    flyposting squads. Manual monitoring is expensive, slow, and inconsistent.
+  • A single city block can have dozens of violations; human inspectors cannot
+    cover every street every day.
+  • Real-time, AI-driven monitoring can scale coverage without proportional
+    increase in cost.
+
+Existing Solutions and Their Limitations:
+------------------------------------------
+  1. Manual Inspection: Officers walk routes, photograph violations.
+     → Slow, coverage-limited, subject to human bias, no data analytics.
+
+  2. CCTV with Human Monitoring: Cameras watched by control-room staff.
+     → Cannot reasonably monitor every frame. High false-negative rate.
+
+  3. Generic Object Detection APIs (e.g., Google Vision API):
+     → Not trained for advertisement classes. Cannot distinguish an authorized
+       hoarding from an illegal poster. No legal assessment layer.
+
+  4. Rule-based Image Processing:
+     → Brittle. Cannot handle variations in lighting, angle, or ad design.
+
+This project addresses all these gaps by combining fine-tunable, domain-specific
+deep learning with an intelligent reporting layer.
+
+
+--------------------------------------------------------------------------------
+3. PROPOSED SOLUTION
+--------------------------------------------------------------------------------
+
+How does this project solve the problem?
+-----------------------------------------
+The system provides an end-to-end pipeline:
+
+  Step 1: A user (field officer or admin) uploads a street photograph via the
+          React web interface.
+
+  Step 2: The Node.js backend receives the image, saves it, and forwards it to
+          a dedicated Python ML microservice.
+
+  Step 3: The ML microservice runs YOLOv8 inference and returns bounding boxes,
+          class names, and confidence scores for every detected advertisement.
+
+  Step 4: The backend sends the detection results to an LLM service that
+          generates a structured enforcement report: summary, legal status
+          (authorized / likely_unauthorized / unauthorized), and recommended
+          action.
+
+  Step 5: The full result — image reference, detections, report — is saved to
+          MongoDB and returned to the frontend for display.
+
+Key Features and Innovations:
+------------------------------
+  • Domain-specific 4-class detection: poster, banner, sticker, graffiti_ad.
+  • LLM-generated enforcement reports with legal status classification.
+  • Fully offline fallback: rule-based report if no LLM API key is available.
+  • Fine-tunable model: ships with yolov8n.pt fallback; train.py produces a
+    domain-specific best.pt with a single command.
+  • REST API with full CRUD on detection history and reports.
+  • Docker Compose support for one-command deployment.
+  • GPS/location metadata can be attached to each detection.
+
+
+--------------------------------------------------------------------------------
+4. TECHNOLOGIES USED
+--------------------------------------------------------------------------------
+
+Layer            | Technology              | Why Chosen
+-----------------|-------------------------|--------------------------------------
+CV / ML          | Python, YOLOv8          | State-of-the-art real-time object
+                 | (ultralytics library)   | detection; easy to fine-tune on
+                 |                         | custom classes; strong community.
+-----------------|-------------------------|--------------------------------------
+ML API           | FastAPI, uvicorn        | Async Python web framework; auto-
+                 |                         | generates OpenAPI docs; very fast
+                 |                         | for microservice use cases.
+-----------------|-------------------------|--------------------------------------
+Backend          | Node.js 18, Express.js  | Non-blocking I/O ideal for file
+                 |                         | upload handling; large ecosystem;
+                 |                         | easy to integrate with MongoDB.
+-----------------|-------------------------|--------------------------------------
+Database         | MongoDB, Mongoose       | Document-oriented DB suits the
+                 |                         | flexible, nested structure of
+                 |                         | detection records (arrays of boxes,
+                 |                         | embedded reports, GPS data).
+-----------------|-------------------------|--------------------------------------
+LLM              | Google Gemini 1.5 Flash | Low latency, cost-effective LLM;
+                 | via LangChain.js        | LangChain provides prompt templating
+                 |                         | and chain abstraction.
+-----------------|-------------------------|--------------------------------------
+Frontend         | React 18, Tailwind CSS, | React for component-based UI;
+                 | React Router v6         | Tailwind for rapid, responsive
+                 |                         | styling; Router for multi-page SPA.
+-----------------|-------------------------|--------------------------------------
+HTTP Client      | axios, form-data        | Handles multipart file uploads and
+                 |                         | REST calls between services.
+-----------------|-------------------------|--------------------------------------
+Image Processing | Pillow (PIL)            | Lightweight image dimension reading
+                 |                         | without loading full pixel data.
+-----------------|-------------------------|--------------------------------------
+Containerization | Docker, Docker Compose  | One-command multi-service deployment;
+                 |                         | ensures environment consistency.
+
+
+--------------------------------------------------------------------------------
+5. SYSTEM ARCHITECTURE / WORKFLOW
+--------------------------------------------------------------------------------
+
+Architecture Overview:
+-----------------------
+
+  ┌──────────────────┐   Upload Image   ┌──────────────────────┐
+  │  React Frontend  │ ───────────────▶ │  Node.js / Express   │
+  │   (port 3000)    │ ◀─────────────── │  Backend (port 3001) │
+  └──────────────────┘  Detections +    └──────────┬───────────┘
+                         LLM Report                │ runInference()
+                                                   ▼
+                                        ┌──────────────────────┐
+                                        │ FastAPI ML Service   │
+                                        │   YOLOv8 (port 8001) │
+                                        └──────────────────────┘
+                                                   │
+                                                   ▼
+                                        ┌──────────────────────┐
+                                        │ MongoDB (port 27017) │
+                                        └──────────────────────┘
+
+Step-by-step workflow:
+-----------------------
+  1. USER uploads an image via the React UI (multipart/form-data POST to
+     /api/detect, optionally with location metadata).
+
+  2. MULTER middleware (Node.js) validates file type and saves the image to
+     backend/uploads/ with a unique filename.
+
+  3. DETECT CONTROLLER orchestrates the pipeline:
+       a. Validates the file exists.
+       b. Calls inferenceService.runInference(imagePath).
+       c. Calls llmService.generateReport(detections, imageInfo).
+       d. Calls Detection.create(...) to persist in MongoDB.
+       e. Returns the full result as JSON.
+
+  4. INFERENCE SERVICE (Node.js) forwards the image to the Python FastAPI
+     service at POST /predict using axios + FormData.
+
+  5. FASTAPI ML SERVICE receives the file, saves it to a temp path, runs
+     run_inference() with YOLOv8, returns JSON of detections + image size,
+     and deletes the temp file.
+
+  6. LLM SERVICE receives the detection list and image dimensions. If a
+     Gemini API key is configured, it builds a LangChain prompt chain
+     (system prompt + human context) and calls gemini-1.5-flash. The JSON
+     response is parsed to extract summary, legalStatus, recommendation.
+     If the key is absent, the rule-based fallback runs instead.
+
+  7. MONGODB stores the complete Detection document (image URL, detection
+     boxes, report, location, metadata, timestamps).
+
+  8. RESPONSE is sent to the React frontend which renders bounding boxes on
+     the image, the report, and the legal status badge.
+
+Input → Processing → Output:
+------------------------------
+  INPUT:  JPEG / PNG / WebP street photograph
+  PROCESS: YOLOv8 object detection → LLM report generation → DB write
+  OUTPUT: JSON with detection bounding boxes, class names, confidence scores,
+          enforcement report, legal status, and processing time.
+
+
+--------------------------------------------------------------------------------
+6. ALGORITHMS USED
+--------------------------------------------------------------------------------
+
+6.1 YOLOv8 — You Only Look Once (version 8)
+--------------------------------------------
+Working Principle:
+  YOLO is a single-stage object detection algorithm. Unlike two-stage detectors
+  (like Faster R-CNN that first proposes regions, then classifies them), YOLO
+  processes the entire image in one forward pass through a convolutional neural
+  network (CNN). It divides the image into an S×S grid; each cell predicts
+  bounding boxes, objectness scores, and class probabilities simultaneously.
+
+Architecture (YOLOv8 specific):
+  • Backbone: CSPDarknet (Cross-Stage Partial Network) — extracts hierarchical
+    features at multiple scales.
+  • Neck: PANet (Path Aggregation Network) — fuses multi-scale features for
+    detecting both small and large objects.
+  • Head: Anchor-free detection head — predicts boxes directly without
+    predefined anchor boxes (improvement over YOLOv5).
+
+Key hyperparameters used:
+  • Confidence threshold: 0.4 (detections below 40% confidence are discarded).
+  • Image size: 640×640 pixels during training.
+  • Base model: yolov8n.pt (nano — fastest variant; suitable for edge devices).
+
+Why YOLO over other algorithms?
+  • Faster R-CNN: Accurate but slow (two-stage). Not suitable for real-time use.
+  • SSD: Faster but less accurate at small objects (stickers).
+  • YOLOv8: Best speed-accuracy tradeoff; native Python API via "ultralytics";
+    built-in training, validation, and export pipeline.
+
+Output format:
+  Each detection = { class_name, confidence, bbox: [x1, y1, x2, y2] }
+  Bounding box coordinates are in pixel space relative to the original image.
+
+6.2 Transfer Learning (Fine-Tuning)
+-------------------------------------
+The project uses transfer learning:
+  • Start with yolov8n.pt — a model pre-trained on the COCO dataset (80 classes
+    including person, car, etc.) which has already learned general visual
+    features (edges, textures, shapes).
+  • Fine-tune on the custom advertisement dataset (4 classes) for 50 epochs.
+  • Only the final classification head adapts to new classes; the backbone
+    retains general feature extraction ability.
+
+Analogy: Like a doctor who already knows anatomy (pre-training) and then
+  specializes in dermatology (fine-tuning) — much faster than starting from
+  scratch.
+
+6.3 Rule-Based Fallback Algorithm (Offline Mode)
+--------------------------------------------------
+When no LLM API key is present, a deterministic decision tree runs:
+  • 0 detections           → legalStatus = "authorized"
+  • 1–2 detections         → legalStatus = "likely_unauthorized"
+  • 3+ detections          → legalStatus = "unauthorized"
+  • Any detection conf ≥ 0.8 → legalStatus = "unauthorized" (override)
+
+This ensures the pipeline is never broken by external API failures.
+
+6.4 LangChain Prompt Chain
+----------------------------
+  • A ChatPromptTemplate is constructed with a system role (enforcement expert
+    persona) and a human message (structured detection context).
+  • The chain is: prompt → Gemini LLM → StringOutputParser.
+  • The output is parsed as JSON; invalid JSON triggers the rule-based fallback.
+  • Temperature is set to 0.2 (low randomness for consistent, professional
+    enforcement language).
+
+
+--------------------------------------------------------------------------------
+7. IMPLEMENTATION DETAILS
+--------------------------------------------------------------------------------
+
+Project Structure:
+-------------------
+  ad-detection-system/
+  ├── ml/                        ← Python ML microservice
+  │   ├── inference.py           ← YOLOv8 inference logic (singleton model)
+  │   ├── inference_api.py       ← FastAPI REST wrapper
+  │   ├── train.py               ← Training script (transfer learning)
+  │   ├── data.yaml              ← Dataset config (4 classes)
+  │   └── yolov8n.pt             ← Pre-trained fallback weights (~6.5 MB)
+  ├── backend/                   ← Node.js / Express API
+  │   ├── server.js              ← App setup, CORS, MongoDB connection
+  │   ├── controllers/
+  │   │   └── detectController.js ← Pipeline orchestrator
+  │   ├── services/
+  │   │   ├── inferenceService.js ← Talks to FastAPI
+  │   │   └── llmService.js       ← Gemini + rule-based reports
+  │   ├── models/
+  │   │   └── Detection.js        ← Mongoose schema
+  │   └── routes/                 ← Express routers
+  └── frontend/                  ← React 18 + Tailwind CSS SPA
+      └── src/
+          ├── pages/             ← Upload, History, Reports pages
+          ├── components/        ← Reusable UI components
+          └── services/          ← Axios API calls
+
+Dataset:
+---------
+  • 4 custom classes: poster, banner, sticker, graffiti_ad.
+  • Annotation tool: CVAT or Roboflow (YOLO 1.1 format export).
+  • Directory structure: ml/data/images/{train,val} and ml/data/labels/{train,val}.
+  • data.yaml defines paths, number of classes (nc: 4), and class names.
+
+Model Training Process (train.py):
+------------------------------------
+  1. Load yolov8n.pt as the base model (transfer learning start point).
+  2. Call model.train(data="data.yaml", epochs=50, imgsz=640).
+     YOLOv8 handles augmentation (mosaic, flip, HSV jitter) internally.
+  3. Best weights from the run are copied to ml/models/best.pt.
+  4. Training metrics are printed: mAP@0.50, mAP@0.50:0.95, Precision, Recall.
+
+Inference singleton pattern (inference.py):
+--------------------------------------------
+  The YOLO model is loaded once at FastAPI startup (_load_model) and cached in
+  a global variable (_model). Subsequent requests reuse the cached model,
+  eliminating costly reload time for every HTTP request.
+  Priority: best.pt (fine-tuned) → yolov8n.pt (fallback).
+
+MongoDB Schema (Detection.js):
+--------------------------------
+  Detection document contains:
+    • imageUrl, originalFilename
+    • detections[]: array of { className, confidence, bbox[4], label }
+    • report: { summary, legalStatus, recommendation, rawText }
+    • location: { description, gps: { lat, lng } }
+    • metadata: { imageWidth, imageHeight, processingTimeMs }
+    • createdAt (indexed descending for fast recent-first queries)
+
+Evaluation Metrics:
+--------------------
+  • mAP@0.50     : Mean Average Precision at IoU threshold 0.50. Primary metric.
+  • mAP@0.50:0.95: Stricter metric averaging over IoU 0.50–0.95. COCO standard.
+  • Precision    : Of all predicted ad boxes, what fraction are correct?
+  • Recall       : Of all actual ads in the image, what fraction were found?
+  • Confidence Threshold: Set to 0.4 — balances false positives and false negatives.
+
+  IoU (Intersection over Union): measures how much the predicted bounding box
+  overlaps the ground-truth box. IoU ≥ 0.5 means the detection is counted as
+  correct (True Positive).
+
+Challenges Faced and Solutions:
+---------------------------------
+  Challenge 1: ML service and Node.js backend are separate processes.
+  Solution:    inferenceService.js uses axios with a 30-second timeout and
+               catches ECONNREFUSED errors, returning a clear 503 with a helpful
+               message ("start the FastAPI service: uvicorn ...").
+
+  Challenge 2: LLM API key may not always be available.
+  Solution:    Dual-mode llmService.js — LLM path and deterministic fallback.
+               The entire pipeline works without any API key.
+
+  Challenge 3: Gemini sometimes wraps JSON in markdown code fences.
+  Solution:    parseLLMResponse() strips ```json ... ``` before JSON.parse.
+               On parse failure, gracefully degrades to rule-based report.
+
+  Challenge 4: Temp files need cleanup after inference.
+  Solution:    inference_api.py uses tempfile.mkstemp inside a try/finally block
+               ensuring os.remove() always runs, even if inference throws.
+
+  Challenge 5: MongoDB may not be running when the backend starts.
+  Solution:    connectMongo() uses recursive setTimeout retry every 5 seconds.
+               The mongoose 'disconnected' event also triggers reconnection.
+
+
+--------------------------------------------------------------------------------
+8. RESULTS & OUTPUT
+--------------------------------------------------------------------------------
+
+What results are achieved?
+---------------------------
+For each uploaded image the system returns:
+
+  1. Detection list:
+       [
+         { className: "poster", confidence: 0.87, bbox: [120, 45, 380, 210],
+           label: "poster (87% confidence)" },
+         { className: "sticker", confidence: 0.61, bbox: [500, 300, 560, 340],
+           label: "sticker (61% confidence)" }
+       ]
+
+  2. Enforcement report (LLM or rule-based):
+       {
+         summary:        "2 unauthorized advertisements detected (poster, sticker).",
+         legalStatus:    "unauthorized",
+         recommendation: "Dispatch a field inspector to record and remove the
+                          identified advertisements. Issue a compliance notice.",
+         rawText:        "..." (full LLM output)
+       }
+
+  3. Metadata: imageSize, processingTimeMs, MongoDB document ID.
+
+Accuracy / Performance:
+------------------------
+  • With the fallback yolov8n.pt model (trained on COCO 80 classes), the system
+    detects general objects. Actual advertisement detection accuracy depends on
+    the fine-tuned best.pt model.
+  • With a properly annotated custom dataset of ~1000+ images, YOLOv8n typically
+    achieves mAP@0.50 of 0.75–0.90 on street advertisement classes.
+  • Inference time: ~150–400ms on CPU per image; <50ms on GPU.
+  • Confidence threshold of 0.4 filters low-quality detections.
+
+API Endpoints:
+---------------
+  POST   /api/detect           Upload image → full detection + report pipeline
+  GET    /api/history          Paginated list of all past detections
+  GET    /api/history/stats    Aggregate statistics (counts by class, status)
+  GET    /api/reports          Paginated list of enforcement reports
+  GET    /api/reports/:id      Single report detail
+  DELETE /api/reports/:id      Delete a report
+  GET    /health               Backend liveness check
+
+
+--------------------------------------------------------------------------------
+9. FUTURE SCOPE
+--------------------------------------------------------------------------------
+
+Possible Improvements:
+------------------------
+  1. Real-Time Video Analysis: Extend to RTSP video streams from CCTV cameras
+     using OpenCV frame sampling + YOLOv8 tracking (ultralytics ByteTrack).
+
+  2. GPS Auto-Tagging: Integrate smartphone EXIF GPS data extraction (using
+     Pillow's ExifTags) to auto-populate location without manual entry.
+
+  3. Active Learning Loop: When a field officer marks a detection as incorrect,
+     that image is added to the training queue for re-annotation and model
+     improvement — continuous learning from real-world usage.
+
+  4. Multi-City Dashboard: A GIS-based heatmap (Leaflet.js / Google Maps API)
+     showing violation hotspots across city zones.
+
+  5. Mobile App: A React Native companion app for field officers to photograph
+     and upload violations on-the-spot with live GPS tracking.
+
+  6. OCR Integration: Add Tesseract or Google Vision OCR to extract advertiser
+     phone numbers from detected ads for enforcement follow-up.
+
+  7. Severity Scoring: Weighted scoring system considering ad size (bbox area),
+     class type, and location (near school / hospital = higher severity).
+
+  8. Model Upgrade: Move from YOLOv8n (nano) to YOLOv8m or YOLOv8l for higher
+     accuracy as compute resources allow.
+
+Scalability:
+-------------
+  • The microservice architecture allows each layer (ML, backend, database) to
+    scale independently. ML inference can be horizontally scaled with a load
+    balancer in front of multiple FastAPI instances.
+  • MongoDB supports horizontal sharding for high-volume detection logs.
+  • Docker Compose → Kubernetes migration path is straightforward given the
+    containerized design.
+
+Real-World Applications:
+-------------------------
+  • Municipal corporations and smart-city platforms.
+  • Traffic authority enforcement systems.
+  • Urban planning and environmental monitoring NGOs.
+  • Commercial property management (unauthorized ads on owned buildings).
+
+
+--------------------------------------------------------------------------------
+10. CONCLUSION
+--------------------------------------------------------------------------------
+
+Summary:
+---------
+AdDetect is a three-tier, microservice-based computer vision system that solves
+the real-world problem of unauthorized street advertisement detection using:
+  • YOLOv8 for fast, accurate object detection with custom class training,
+  • FastAPI for a lightweight, async ML inference microservice,
+  • Node.js/Express for REST API orchestration and business logic,
+  • Google Gemini + LangChain for intelligent, context-aware enforcement reports,
+  • MongoDB for persistent, queryable audit trails,
+  • React + Tailwind CSS for a clean, responsive operator dashboard.
+
+The system is fully production-ready with error handling at every layer, offline
+fallback capabilities, and a Docker Compose deployment option.
+
+Impact and Usefulness:
+-----------------------
+  • AUTOMATION: Replaces or augments manual street inspection with AI-assisted
+    analysis, dramatically increasing coverage with no proportional cost increase.
+  • CONSISTENCY: An algorithm applies the same criteria to every image, removing
+    human bias from enforcement decisions.
+  • AUDITABILITY: Every detection is stored with timestamps, location, and a
+    generated report — creating a legally traceable enforcement trail.
+  • EXTENSIBILITY: The modular microservice design allows any component (ML
+    model, LLM provider, frontend) to be upgraded independently.
+  • OFFLINE RESILIENCE: The system never fails catastrophically. Even without
+    an LLM API key or a fine-tuned model, it still produces valid results.
+
+This project demonstrates practical integration of computer vision, natural
+language processing, and full-stack web development to solve a real civic
+problem — making it a strong example of applied AI for social good.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
