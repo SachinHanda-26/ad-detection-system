@@ -55,4 +55,3 @@ yarn-error.log*
 # ── Test coverage ────────────────────────────────────────────────────────────
 coverage/
 
-ml/yolov8n.pt
