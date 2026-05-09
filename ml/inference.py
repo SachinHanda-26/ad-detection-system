@@ -18,6 +18,10 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
+import torch
+# Force PyTorch to use 1 thread to save RAM on Render Free Tier
+torch.set_num_threads(1)
+
 # ── Model Loading ─────────────────────────────────────────────────────────────
 _MODEL_DIR   = Path(__file__).parent / "models"
 _BEST_PT     = _MODEL_DIR / "best.pt"

@@ -47,14 +47,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pre-load model on startup so first request is fast
-@app.on_event("startup")
-async def startup_event():
-    try:
-        _load_model()
-        print("[startup] Model loaded successfully.")
-    except Exception as exc:
-        print(f"[startup] WARNING: Could not pre-load model — {exc}")
+# We intentionally do NOT pre-load the model on startup anymore.
+# This prevents the Render free tier from running out of memory
+# before the server even fully starts and opens the port.
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
