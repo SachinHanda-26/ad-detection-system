@@ -31,7 +31,7 @@ app.use(
     origin: (origin, callback) => {
       // allow requests with no origin (curl, Postman, same-origin SSR)
       if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      if (ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin) || /\.netlify\.app$/.test(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`CORS: origin ${origin} not allowed`));
