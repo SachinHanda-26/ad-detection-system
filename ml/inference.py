@@ -81,9 +81,11 @@ def run_inference(image_path: str) -> List[Dict[str, Any]]:
     if not os.path.isfile(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 
+    import gc
     model = _load_model()
 
-    results = model(image_path, verbose=False)
+    # Force a very small image size (320) to save massive amounts of RAM during inference
+    results = model(image_path, imgsz=320, verbose=False)
     detections: List[Dict[str, Any]] = []
 
     for result in results:
@@ -114,6 +116,7 @@ def run_inference(image_path: str) -> List[Dict[str, Any]]:
                 }
             )
 
+    gc.collect()
     return detections
 
 
