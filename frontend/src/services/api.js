@@ -4,7 +4,7 @@ const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 60_000, // 60 s — inference can be slow
+  timeout: 120_000, // 120 s — ML inference + LLM can be slow
   headers: { 'Content-Type': 'application/json' },
 });
 

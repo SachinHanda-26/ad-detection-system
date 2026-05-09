@@ -12,8 +12,10 @@
 const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
 const { ChatPromptTemplate }     = require('@langchain/core/prompts');
 const { StringOutputParser }     = require('@langchain/core/output_parsers');
+const axios                      = require('axios');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 
 // ── Offline / rule-based fallback ─────────────────────────────────────────────
 
@@ -65,12 +67,12 @@ function ruleBasedReport(detections, imageInfo) {
 const SYSTEM_PROMPT = `You are an urban enforcement assistant analyzing street advertisement violations.
 Given detection results from a computer vision model, generate a structured report.
 Always respond with ONLY valid JSON (no markdown, no code fences) in this exact format:
-{
+{{
   "summary": "<1-2 sentence summary>",
   "legalStatus": "unauthorized" | "likely_unauthorized" | "needs_review" | "authorized",
   "recommendation": "<specific action to take>",
   "details": "<paragraph with full explanation>"
-}`;
+}}`;
 
 /**
  * Build a human-readable description of the detections for the LLM prompt.
@@ -133,18 +135,57 @@ function parseLLMResponse(text, detections, imageInfo) {
  */
 async function generateReport(detections, imageInfo) {
   // ── Offline mode ───────────────────────────────────────────────────────────
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_key_here') {
-    console.info('[llmService] GEMINI_API_KEY not set — using rule-based offline report.');
+  if (!OPENROUTER_API_KEY && (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_key_here')) {
+    console.info('[llmService] No API keys set — using rule-based offline report.');
     return ruleBasedReport(detections, imageInfo);
+  }
+
+  // ── OpenRouter + Llama 3.3 70B Instruct ───────────────────────────────────
+  if (OPENROUTER_API_KEY) {
+    try {
+      const context = buildDetectionContext(detections, imageInfo);
+      
+      const response = await axios.post(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          model: 'meta-llama/llama-3.3-70b-instruct',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: context }
+          ],
+          temperature: 0.2,
+          max_tokens: 512,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'HTTP-Referer': 'http://localhost:3000',
+            'X-Title': 'Ad Detection System',
+            'Content-Type': 'application/json'
+          },
+          timeout: 25000
+        }
+      );
+
+      const llmOutput = response.data.choices[0].message.content;
+      return parseLLMResponse(llmOutput, detections, imageInfo);
+    } catch (err) {
+      console.error('[llmService] OpenRouter call failed:', err.response?.data || err.message);
+      // Gracefully fall back so the pipeline never breaks
+      const fallback = ruleBasedReport(detections, imageInfo);
+      fallback.rawText = `LLM error: ${err.message}\n\n[Fallback report applied]`;
+      return fallback;
+    }
   }
 
   // ── LangChain + Gemini ────────────────────────────────────────────────────
   try {
     const model = new ChatGoogleGenerativeAI({
-      model:       'gemini-1.5-flash',
-      temperature: 0.2,
+      model:          'gemini-1.5-flash',
+      temperature:    0.2,
       maxOutputTokens: 512,
-      apiKey:      GEMINI_API_KEY,
+      apiKey:         GEMINI_API_KEY,
+      timeout:        25000, // 25 s — fail fast so frontend doesn't time out
     });
 
     const prompt = ChatPromptTemplate.fromMessages([
