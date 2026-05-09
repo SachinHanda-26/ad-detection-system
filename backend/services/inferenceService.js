@@ -13,7 +13,7 @@ const axios    = require('axios');
 const FormData = require('form-data');
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8001';
-const TIMEOUT_MS     = 30_000; // 30 s — inference can be slow on CPU
+const TIMEOUT_MS     = 100_000; // 100 s — inference can be slow on CPU (Render Free Tier)
 
 /**
  * Run CV inference on the given image file.
